@@ -22,7 +22,7 @@ Hit your target with this simple link creation, redirection, and tracking system
 1. Ensure **Xophz COMPASS** is installed and active.
 2. Upload `xophz-compass-silver-arrow` to `/wp-content/plugins/`.
 3. Activate through the Plugins menu.
-4. Access via the COMPASS dashboard → **Silver Arrow**.
+4. Access via the My Compass dashboard → **Silver Arrow**.
 
 ## Frontend Routes
 
