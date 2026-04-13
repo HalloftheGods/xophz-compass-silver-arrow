@@ -17,7 +17,7 @@
  * Plugin Name:       Xophz A|B Silver Arrow
  * Plugin URI:        http://www.mycompassconsulting.com/
  * Description:     
- * Version:           26.4.11
+ * Version:           26.4.13.484
  * Author:            Hall of the Gods, Inc.
  * Author URI:        http://www.midnightnerd.com/
  * License:           GPL-2.0+
@@ -36,7 +36,7 @@ if ( ! defined( 'WPINC' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'XOPHZ_COMPASS_SILVER_ARROW_VERSION', '26.4.11' );
+define( 'XOPHZ_COMPASS_SILVER_ARROW_VERSION', '26.4.13.484' );
 
 /**
  * The code that runs during plugin activation.
