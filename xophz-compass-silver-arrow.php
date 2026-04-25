@@ -15,7 +15,7 @@
  * @wordpress-plugin
  * Category:          Trajectory
  * Plugin Name:       Xophz A|B Silver Arrow
- * Plugin URI:        http://www.mycompassconsulting.com/
+ * Plugin URI:        https://github.com/HalloftheGods/xophz-compass-silver-arrow
  * Description:     
  * Version:           26.4.24
  * Author:            Hall of the Gods, Inc.
