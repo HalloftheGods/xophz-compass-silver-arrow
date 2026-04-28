@@ -14,9 +14,9 @@
  *
  * @wordpress-plugin
  * Category:          Trajectory
- * Plugin Name:       Xophz A|B Silver Arrow
+ * Plugin Name:       Xophz A/B Silver Arrow
  * Plugin URI:        https://github.com/HalloftheGods/xophz-compass-silver-arrow
- * Description:     
+ * Description:       The silver bullet to A/B Split Testing.
  * Version:           26.4.27
  * Author:            Hall of the Gods, Inc.
  * Author URI:        http://www.hallofthegods.com/
@@ -59,6 +59,21 @@ function deactivate_xophz_compass_silver_arrow() {
 
 register_activation_hook( __FILE__, 'activate_xophz_compass_silver_arrow' );
 register_deactivation_hook( __FILE__, 'deactivate_xophz_compass_silver_arrow' );
+
+add_filter( 'compass_perform_widgets', function( $widgets ) {
+	$widgets[] = array(
+		'key'           => 'silver-arrow-overview',
+		'plugin'        => 'xophz-compass-silver-arrow',
+		'title'         => 'A/B Testing',
+		'icon'          => 'fad fa-crosshairs',
+		'color'         => '#62c9ff',
+		'component'     => 'perform-widget-silver-arrow',
+		'data_endpoint' => '/wp-json/xophz-compass/v1/silver-arrow/targeted',
+		'size'          => 'sm',
+		'order'         => 30,
+	);
+	return $widgets;
+});
 
 /**
  * The core plugin class that is used to define internationalization,

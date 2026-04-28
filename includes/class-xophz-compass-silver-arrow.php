@@ -122,6 +122,8 @@ class Xophz_Compass_Silver_Arrow {
 		 */
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-xophz-compass-silver-arrow-public.php';
 
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-silver-arrow-rest.php';
+
 		$this->loader = new Xophz_Compass_Silver_Arrow_Loader();
 
 	}
@@ -157,7 +159,21 @@ class Xophz_Compass_Silver_Arrow {
 		// $this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 		// $this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'addToMenu' );
+		$this->loader->add_action( 'init', $this, 'register_post_types' );
 
+		$rest_api = new Xophz_Compass_Silver_Arrow_Rest();
+		$this->loader->add_action( 'rest_api_init', $rest_api, 'register_routes' );
+
+	}
+
+	public function register_post_types() {
+		$args = array(
+			'public' => false,
+			'show_ui' => false,
+			'label'  => 'Silver Arrow Tests',
+			'supports' => array('title', 'custom-fields')
+		);
+		register_post_type( 'sa_test', $args );
 	}
 
 	/**
@@ -171,8 +187,14 @@ class Xophz_Compass_Silver_Arrow {
 
 		$plugin_public = new Xophz_Compass_Silver_Arrow_Public( $this->get_xophz_compass_silver_arrow(), $this->get_version() );
 
-		// $this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
-		// $this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
+		$this->loader->add_action( 'template_redirect', $plugin_public, 'route_traffic', 1 );
+		$this->loader->add_action( 'the_post', $plugin_public, 'swap_post_content' );
+		$this->loader->add_action( 'wp_head', $plugin_public, 'inject_canonical' );
+		$this->loader->add_action( 'forminator_custom_form_submit_before_set_fields', $plugin_public, 'track_conversion', 10, 3 );
+		
+		// The DNA Snapshot Hooks
+		$this->loader->add_action( 'wp_put_post_revision', $plugin_public, 'capture_meta_snapshot', 10, 2 );
+		$this->loader->add_filter( 'get_post_metadata', $plugin_public, 'intercept_meta_requests', 10, 4 );
 
 	}
 
