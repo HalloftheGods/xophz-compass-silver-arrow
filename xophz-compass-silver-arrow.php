@@ -14,6 +14,7 @@
  *
  * @wordpress-plugin
  * Category:          Trajectory
+ * Group:             MA
  * Plugin Name:       Xophz A/B Silver Arrow
  * Plugin URI:        https://github.com/HalloftheGods/xophz-compass-silver-arrow
  * Description:       The silver bullet to A/B Split Testing.
