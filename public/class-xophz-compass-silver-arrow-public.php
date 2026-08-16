@@ -61,24 +61,32 @@ class Xophz_Compass_Silver_Arrow_Public {
 	 */
 	public function enqueue_styles() {
 
-		/**
-		 * This function is provided for demonstration purposes only.
-		 *
-		 * An instance of this class should be passed to the run() function
-		 * defined in Xophz_Compass_Silver_Arrow_Loader as all of the hooks are defined
-		 * in that particular class.
-		 *
-		 * The Xophz_Compass_Silver_Arrow_Loader will then create the relationship
-		 * between the defined hooks and the functions defined in this
-		 * class.
-		 */
-
 		wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'css/xophz-compass-silver-arrow-public.css', array(), $this->version, 'all' );
 
 	}
 
 	/**
-	 * Register the JavaScript for the public-facing side of the site.
+	 * Register the JavaScript and beacon configuration for the public-facing side of the site.
+	 *
+	 * @since    1.0.0
+	 */
+	public function enqueue_scripts() {
+
+		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/xophz-compass-silver-arrow-public.js', array( 'jquery' ), $this->version, true );
+
+		wp_localize_script(
+			$this->plugin_name,
+			'silverArrowData',
+			array(
+				'restUrl' => esc_url_raw( rest_url( 'xophz-compass/v1/silver-arrow/track-conversion' ) ),
+				'nonce'   => wp_create_nonce( 'wp_rest' )
+			)
+		);
+
+	}
+
+	/**
+	 * Route incoming traffic and assign isolated sticky sessions.
 	 *
 	 * @since    1.0.0
 	 */
@@ -88,6 +96,9 @@ class Xophz_Compass_Silver_Arrow_Public {
 		}
 
 		global $post;
+		if ( ! $post ) {
+			return;
+		}
 
 		$is_targeted = get_post_meta( $post->ID, '_sa_is_targeted', true );
 		if ( ! $is_targeted ) {
@@ -140,8 +151,7 @@ class Xophz_Compass_Silver_Arrow_Public {
 			'posts_per_page' => -1
 		) );
 
-		// Simplistic global allocation engine for MVP:
-		// We collect total allocated weight of tests.
+		// Simplistic global allocation engine:
 		$total_test_weight = 0;
 		$test_pool = array();
 
@@ -205,7 +215,7 @@ class Xophz_Compass_Silver_Arrow_Public {
 
 		// If no test caught them (or dice fell into Live pool) -> Passive Live Tracking
 		$revisions = wp_get_post_revisions( $post->ID );
-		$live_rev_id = !empty($revisions) ? current($revisions)->ID : $post->ID;
+		$live_rev_id = ! empty( $revisions ) ? current( $revisions )->ID : $post->ID;
 
 		$this->set_double_tag_cookie( $post->ID, null, $live_rev_id );
 		$this->log_impression( $post->ID, $live_rev_id, null );
@@ -214,8 +224,10 @@ class Xophz_Compass_Silver_Arrow_Public {
 	public function inject_canonical() {
 		if ( isset( $_GET['sa_rev'] ) && is_singular() ) {
 			global $post;
-			$clean_url = get_permalink( $post->ID );
-			echo '<link rel="canonical" href="' . esc_url( $clean_url ) . '" />' . "\n";
+			if ( $post ) {
+				$clean_url = get_permalink( $post->ID );
+				echo '<link rel="canonical" href="' . esc_url( $clean_url ) . '" />' . "\n";
+			}
 		}
 	}
 
@@ -237,8 +249,68 @@ class Xophz_Compass_Silver_Arrow_Public {
 			}
 		}
 
+		// Also check if revision itself was stored with meta
+		global $wpdb;
+		$rev_meta_rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d",
+			$revision_id
+		) );
+
+		foreach ( $rev_meta_rows as $rm ) {
+			if ( strpos( $rm->meta_key, '_sa_' ) === 0 ) continue;
+			$all_meta[$rm->meta_key] = array( $rm->meta_value );
+		}
+
 		$json_archive = wp_json_encode( $all_meta );
 		update_post_meta( $post_id, '_sa_meta_archive_' . $revision_id, $json_archive );
+	}
+
+	public function backfill_post_revisions_dna( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) return 0;
+
+		global $wpdb;
+		// Fetch parent post's current full metadata
+		$parent_meta_rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d",
+			$post_id
+		) );
+
+		$base_meta = array();
+		foreach ( $parent_meta_rows as $row ) {
+			if ( strpos( $row->meta_key, '_sa_' ) === 0 ) continue;
+			$base_meta[$row->meta_key][] = $row->meta_value;
+		}
+
+		// Snapshot parent post itself
+		update_post_meta( $post_id, '_sa_meta_archive_' . $post_id, wp_json_encode( $base_meta ) );
+
+		// Fetch all revisions
+		$revisions = $wpdb->get_results( $wpdb->prepare(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_parent = %d AND post_type = 'revision'",
+			$post_id
+		) );
+
+		$backfilled = 0;
+		foreach ( $revisions as $rev ) {
+			$rev_meta = $base_meta; // Start with parent meta as foundation
+
+			// Check if revision has its own postmeta rows in wp_postmeta (e.g. Elementor's _elementor_data)
+			$rev_meta_rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d",
+				$rev->ID
+			) );
+
+			foreach ( $rev_meta_rows as $rm ) {
+				if ( strpos( $rm->meta_key, '_sa_' ) === 0 ) continue;
+				$rev_meta[$rm->meta_key] = array( $rm->meta_value );
+			}
+
+			update_post_meta( $post_id, '_sa_meta_archive_' . $rev->ID, wp_json_encode( $rev_meta ) );
+			$backfilled++;
+		}
+
+		return $backfilled;
 	}
 
 	public function intercept_meta_requests( $value, $object_id, $meta_key, $single ) {
@@ -259,35 +331,60 @@ class Xophz_Compass_Silver_Arrow_Public {
 
 		$rev_id = intval( $_GET['sa_rev'] );
 		
-		// Fetch our DNA archive for this specific revision
+		// 1. Try fetching our DNA archive for this specific revision
 		$archive_json = get_post_meta( $post->ID, '_sa_meta_archive_' . $rev_id, true );
-		if ( ! $archive_json ) {
-			return $value; // Fallback to live meta if no archive exists
-		}
+		if ( $archive_json ) {
+			$archive = json_decode( $archive_json, true );
+			if ( is_array( $archive ) ) {
+				if ( $meta_key && isset( $archive[$meta_key] ) ) {
+					$meta_val = $archive[$meta_key];
+					if ( $single ) {
+						return is_array( $meta_val ) && isset( $meta_val[0] ) ? maybe_unserialize( $meta_val[0] ) : maybe_unserialize( $meta_val );
+					}
+					return is_array( $meta_val ) ? array_map( 'maybe_unserialize', $meta_val ) : array( maybe_unserialize( $meta_val ) );
+				}
 
-		$archive = json_decode( $archive_json, true );
-
-		// If the requested key isn't in the archive, let WP handle it
-		if ( $meta_key && ! isset( $archive[$meta_key] ) ) {
-			return $value;
-		}
-
-		if ( $meta_key ) {
-			$meta_val = $archive[$meta_key];
-			// get_post_meta normally returns an array of values unless $single is true.
-			// Our archive stored the raw output of get_post_meta(id), which is an array of arrays/strings.
-			if ( $single ) {
-				return maybe_unserialize( $meta_val[0] );
+				if ( ! $meta_key ) {
+					$unserialized_archive = array();
+					foreach ( $archive as $k => $v ) {
+						$unserialized_archive[$k] = is_array( $v ) ? array_map( 'maybe_unserialize', $v ) : array( maybe_unserialize( $v ) );
+					}
+					return $unserialized_archive;
+				}
 			}
-			return array_map( 'maybe_unserialize', $meta_val );
 		}
 
-		// If no specific key requested, return the whole unserialized archive
-		$unserialized_archive = array();
-		foreach ( $archive as $k => $v ) {
-			$unserialized_archive[$k] = array_map( 'maybe_unserialize', $v );
+		// 2. Direct revision-level metadata fallback (e.g. Elementor's native revision meta in wp_postmeta)
+		global $wpdb;
+		if ( $meta_key ) {
+			$raw_rev_values = $wpdb->get_col( $wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$rev_id,
+				$meta_key
+			) );
+
+			if ( ! empty( $raw_rev_values ) ) {
+				if ( $single ) {
+					return maybe_unserialize( $raw_rev_values[0] );
+				}
+				return array_map( 'maybe_unserialize', $raw_rev_values );
+			}
+		} else {
+			$raw_all_rev_meta = $wpdb->get_results( $wpdb->prepare(
+				"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d",
+				$rev_id
+			) );
+
+			if ( ! empty( $raw_all_rev_meta ) ) {
+				$grouped = array();
+				foreach ( $raw_all_rev_meta as $row ) {
+					$grouped[$row->meta_key][] = maybe_unserialize( $row->meta_value );
+				}
+				return $grouped;
+			}
 		}
-		return $unserialized_archive;
+
+		return $value;
 	}
 
 	public function swap_post_content( $post_object ) {
@@ -303,7 +400,7 @@ class Xophz_Compass_Silver_Arrow_Public {
 		}
 	}
 
-	public function track_conversion( $entry, $module_id, $field_data_array ) {
+	public function track_conversion( $arg1 = null, $arg2 = null, $arg3 = null ) {
 		if ( isset( $_COOKIE['sa_session'] ) ) {
 			$session = json_decode( stripslashes( $_COOKIE['sa_session'] ), true );
 			if ( $session && isset( $session['rev_id'] ) ) {
@@ -319,6 +416,11 @@ class Xophz_Compass_Silver_Arrow_Public {
 				}
 			}
 		}
+	}
+
+	public function track_conversion_beacon() {
+		$this->track_conversion();
+		return array( 'success' => true );
 	}
 
 	private function set_double_tag_cookie( $post_id, $test_id, $rev_id ) {

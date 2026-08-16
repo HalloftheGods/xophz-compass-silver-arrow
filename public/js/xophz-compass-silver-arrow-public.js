@@ -1,32 +1,39 @@
 (function( $ ) {
 	'use strict';
 
-	/**
-	 * All of the code for your public-facing JavaScript source
-	 * should reside in this file.
-	 *
-	 * Note: It has been assumed you will write jQuery code here, so the
-	 * $ function reference has been prepared for usage within the scope
-	 * of this function.
-	 *
-	 * This enables you to define handlers, for when the DOM is ready:
-	 *
-	 * $(function() {
-	 *
-	 * });
-	 *
-	 * When the window is loaded:
-	 *
-	 * $( window ).load(function() {
-	 *
-	 * });
-	 *
-	 * ...and/or other possibilities.
-	 *
-	 * Ideally, it is not considered best practise to attach more than a
-	 * single DOM-ready or window-load handler for a particular page.
-	 * Although scripts in the WordPress core, Plugins and Themes may be
-	 * practising this, we should strive to set a better example in our own work.
-	 */
+	window.SilverArrow = window.SilverArrow || {};
+
+	window.SilverArrow.trackConversion = function( goalId ) {
+		if ( typeof silverArrowData === 'undefined' || ! silverArrowData.restUrl ) {
+			return;
+		}
+
+		var payload = {
+			goal_id: goalId || 'generic_cta'
+		};
+
+		if ( navigator.sendBeacon ) {
+			var blob = new Blob( [ JSON.stringify( payload ) ], { type: 'application/json' } );
+			navigator.sendBeacon( silverArrowData.restUrl, blob );
+		} else {
+			fetch( silverArrowData.restUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': silverArrowData.nonce || ''
+				},
+				body: JSON.stringify( payload ),
+				keepalive: true
+			} ).catch( function() {} );
+		}
+	};
+
+	$( function() {
+		// Event delegation for CTA buttons, links, or custom converters
+		$( document ).on( 'click', '[data-sa-convert], .sa-convert', function() {
+			var goalId = $( this ).data( 'sa-convert' ) || $( this ).attr( 'id' ) || 'cta_click';
+			window.SilverArrow.trackConversion( goalId );
+		} );
+	} );
 
 })( jQuery );

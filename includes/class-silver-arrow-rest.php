@@ -80,6 +80,18 @@ class Xophz_Compass_Silver_Arrow_Rest {
 			'permission_callback' => array( $this, 'check_admin_permission' ),
 		));
 
+		register_rest_route( $this->namespace, '/silver-arrow/revisions/(?P<id>\d+)/backfill-dna', array(
+			'methods'  => 'POST',
+			'callback' => array( $this, 'backfill_revisions_dna' ),
+			'permission_callback' => array( $this, 'check_admin_permission' ),
+		));
+
+		register_rest_route( $this->namespace, '/silver-arrow/track-conversion', array(
+			'methods'  => 'POST',
+			'callback' => array( $this, 'track_conversion_beacon' ),
+			'permission_callback' => '__return_true',
+		));
+
 		register_rest_route( $this->namespace, '/silver-arrow/analytics/(?P<id>\d+)', array(
 			'methods'  => 'GET',
 			'callback' => array( $this, 'get_analytics' ),
@@ -178,7 +190,15 @@ class Xophz_Compass_Silver_Arrow_Rest {
 
 		update_post_meta( $post_id, '_sa_is_targeted', '1' );
 
-		return rest_ensure_response( array( 'success' => true, 'post_id' => $post_id ) );
+		// Automatically backfill DNA archives for this newly targeted post and all its revisions
+		$public = new Xophz_Compass_Silver_Arrow_Public( 'xophz-compass-silver-arrow', '1.0.0' );
+		$backfilled_count = $public->backfill_post_revisions_dna( $post_id );
+
+		return rest_ensure_response( array(
+			'success'          => true,
+			'post_id'          => $post_id,
+			'backfilled_count' => $backfilled_count
+		) );
 	}
 
 	public function untarget_page( $request ) {
@@ -204,6 +224,9 @@ class Xophz_Compass_Silver_Arrow_Rest {
 		// Ensure we always include the current live page as the 'Current' revision.
 		if ( $parent_post ) {
 			$has_archive = (bool) get_post_meta( $parent_post->ID, '_sa_meta_archive_' . $parent_post->ID, true );
+			if ( ! $has_archive ) {
+				$has_archive = true; // Current live page always has current metadata
+			}
 			$impressions = $this->aggregate_meta( $parent_post->ID, '_sa_impressions_global_' );
 			$conversions = $this->aggregate_meta( $parent_post->ID, '_sa_conversions_global_' );
 			$conversion_rate = $impressions > 0 ? round( ( $conversions / $impressions ) * 100, 2 ) : 0;
@@ -223,6 +246,16 @@ class Xophz_Compass_Silver_Arrow_Rest {
 
 		foreach ( $revisions as $rev ) {
 			$has_archive = (bool) get_post_meta( $post_id, '_sa_meta_archive_' . $rev->ID, true );
+			if ( ! $has_archive ) {
+				// Check if revision has native postmeta stored in wp_postmeta (e.g. Elementor data)
+				$has_rev_meta = (bool) $wpdb->get_var( $wpdb->prepare(
+					"SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d LIMIT 1",
+					$rev->ID
+				) );
+				if ( $has_rev_meta ) {
+					$has_archive = true;
+				}
+			}
 
 			$impressions = $this->aggregate_meta( $rev->ID, '_sa_impressions_global_' );
 			$conversions = $this->aggregate_meta( $rev->ID, '_sa_conversions_global_' );
@@ -242,6 +275,28 @@ class Xophz_Compass_Silver_Arrow_Rest {
 		}
 
 		return rest_ensure_response( $items );
+	}
+
+	public function backfill_revisions_dna( $request ) {
+		$post_id = intval( $request['id'] );
+		$post = get_post( $post_id );
+
+		if ( ! $post ) {
+			return new WP_Error( 'not_found', 'Page not found', array( 'status' => 404 ) );
+		}
+
+		$public = new Xophz_Compass_Silver_Arrow_Public( 'xophz-compass-silver-arrow', '1.0.0' );
+		$backfilled = $public->backfill_post_revisions_dna( $post_id );
+
+		return rest_ensure_response( array(
+			'success'    => true,
+			'backfilled' => $backfilled
+		) );
+	}
+
+	public function track_conversion_beacon( $request ) {
+		$public = new Xophz_Compass_Silver_Arrow_Public( 'xophz-compass-silver-arrow', '1.0.0' );
+		return rest_ensure_response( $public->track_conversion_beacon() );
 	}
 
 	public function discard_revision( $request ) {
@@ -313,11 +368,12 @@ class Xophz_Compass_Silver_Arrow_Rest {
 		$title = sanitize_text_field( $params['title'] );
 		$config = isset( $params['config'] ) ? $params['config'] : array( 'revisions' => array() );
 		$weight = isset( $params['global_weight'] ) ? intval( $params['global_weight'] ) : 50;
+		$status = isset( $params['status'] ) ? sanitize_text_field( $params['status'] ) : ( ! empty( $params['launch_immediately'] ) ? 'publish' : 'publish' );
 
 		$test_id = wp_insert_post( array(
 			'post_type'   => 'sa_test',
 			'post_title'  => $title,
-			'post_status' => 'draft'
+			'post_status' => $status
 		));
 
 		if ( is_wp_error( $test_id ) ) {
@@ -330,7 +386,8 @@ class Xophz_Compass_Silver_Arrow_Rest {
 
 		return rest_ensure_response( array(
 			'success' => true,
-			'id'      => $test_id
+			'id'      => $test_id,
+			'status'  => $status
 		));
 	}
 

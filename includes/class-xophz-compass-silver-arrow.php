@@ -187,10 +187,19 @@ class Xophz_Compass_Silver_Arrow {
 
 		$plugin_public = new Xophz_Compass_Silver_Arrow_Public( $this->get_xophz_compass_silver_arrow(), $this->get_version() );
 
+		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
+		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
+
 		$this->loader->add_action( 'template_redirect', $plugin_public, 'route_traffic', 1 );
 		$this->loader->add_action( 'the_post', $plugin_public, 'swap_post_content' );
 		$this->loader->add_action( 'wp_head', $plugin_public, 'inject_canonical' );
+		
+		// Multi-Source Conversion Hooks
 		$this->loader->add_action( 'forminator_custom_form_submit_before_set_fields', $plugin_public, 'track_conversion', 10, 3 );
+		$this->loader->add_action( 'wpcf7_mail_sent', $plugin_public, 'track_conversion' );
+		$this->loader->add_action( 'gform_after_submission', $plugin_public, 'track_conversion' );
+		$this->loader->add_action( 'fluentform/submission_inserted', $plugin_public, 'track_conversion' );
+		$this->loader->add_action( 'woocommerce_thankyou', $plugin_public, 'track_conversion' );
 		
 		// The DNA Snapshot Hooks
 		$this->loader->add_action( 'wp_put_post_revision', $plugin_public, 'capture_meta_snapshot', 10, 2 );
