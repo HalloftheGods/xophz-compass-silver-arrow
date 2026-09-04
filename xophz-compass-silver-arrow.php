@@ -54,8 +54,7 @@ function activate_xophz_compass_silver_arrow() {
  * This action is documented in includes/class-xophz-compass-silver-arrow-deactivator.php
  */
 function deactivate_xophz_compass_silver_arrow() {
-	require_once plugin_dir_path( __FILE__ ) . 'includes/class-xophz-compass-silver-arrow-deactivator.php';
-	Xophz_Compass_Silver_Arrow_Deactivator::deactivate();
+	Xophz_Compass_Silver_Arrow::deactivate();
 }
 
 register_activation_hook( __FILE__, 'activate_xophz_compass_silver_arrow' );
